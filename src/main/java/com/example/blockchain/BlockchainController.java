@@ -4,6 +4,7 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.example.blockchain.dto.*;
 import com.example.blockchain.service.AsyncService;
+import com.example.blockchain.util.AESUtil;
 import org.hyperledger.fabric.gateway.Contract;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -13,7 +14,6 @@ import java.util.HashMap;
 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "*")
 public class BlockchainController {
 
     @Autowired
@@ -90,27 +90,56 @@ public class BlockchainController {
 
     @PostMapping("/chain/org")
     public Map<String, Object> submitOrg(@RequestBody OrgInfoDTO dto) {
-        return processDto("ORG_" + (dto.getOrgId() != null ? dto.getOrgId() : dto.getId()), dto, "组织信息");
+        try {
+            // 加密敏感字段
+            if (dto.getOrgName() != null) {
+                dto.setOrgName(AESUtil.encrypt(dto.getOrgName()));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        String rawId = dto.getOrgId() != null ? dto.getOrgId() : String.valueOf(dto.getId());
+        return processDto(rawId, dto, "ORG");
     }
 
     @PostMapping("/chain/alert")
     public Map<String, Object> submitAlert(@RequestBody ThreatAlertDTO dto) {
-        return processDto("ALERT_" + (dto.getThreatId() != null ? dto.getThreatId() : dto.getId()), dto, "威胁告警");
+        try {
+            // 加密敏感字段
+            if (dto.getImpactScope() != null) {
+                dto.setImpactScope(AESUtil.encrypt(dto.getImpactScope()));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        String rawId = dto.getThreatId() != null ? dto.getThreatId() : String.valueOf(dto.getId());
+        return processDto(rawId, dto, "ALERT");
     }
 
     @PostMapping("/chain/traffic")
     public Map<String, Object> submitTraffic(@RequestBody TrafficStatDTO dto) {
-        return processDto("TRAFFIC_" + dto.getId(), dto, "流量统计");
+        String rawId = String.valueOf(dto.getId());
+        return processDto(rawId, dto, "TRAFFIC");
     }
 
     @PostMapping("/chain/report")
     public Map<String, Object> submitReport(@RequestBody ReportConfigDTO dto) {
-        return processDto("REPORT_" + dto.getId(), dto, "报表配置");
+        try {
+            // 加密敏感字段
+            if (dto.getReportUrl() != null) {
+                dto.setReportUrl(AESUtil.encrypt(dto.getReportUrl()));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        String rawId = String.valueOf(dto.getId());
+        return processDto(rawId, dto, "REPORT");
     }
 
     @PostMapping("/chain/trace")
     public Map<String, Object> submitTrace(@RequestBody SourceTracingDTO dto) {
-        return processDto("TRACE_" + dto.getId(), dto, "溯源信息");
+        String rawId = String.valueOf(dto.getId());
+        return processDto(rawId, dto, "TRACE");
     }
 
     // 新增：按类型批量查询 (Rich Query)
@@ -118,34 +147,42 @@ public class BlockchainController {
     public Map<String, Object> queryByType(@PathVariable String type) {
         Map<String, Object> response = new HashMap<>();
         try {
-            // 需要合约支持 queryEvidenceByType 方法
+            // 需要合约支持 queryEvidenceByType 方法 (Range Query实现)
             byte[] result = contract.evaluateTransaction("queryEvidenceByType", type);
             String jsonStr = new String(result, StandardCharsets.UTF_8);
             response.put("status", "success");
             response.put("data", JSON.parseArray(jsonStr));
         } catch (Exception e) {
             response.put("status", "error");
-            response.put("message", "查询失败: " + e.getMessage());
+            String msg = e.getMessage();
+            if (msg.contains("Transaction function") && msg.contains("not found")) {
+                response.put("message", "查询失败: 智能合约未升级，缺少 queryEvidenceByType 方法。请修改合约并升级链码。");
+            } else {
+                response.put("message", "查询失败: " + msg);
+            }
         }
         return response;
     }
 
-    private Map<String, Object> processDto(String eventId, Object dto, String typeName) {
+    private Map<String, Object> processDto(String eventId, Object dto, String typeCode) {
         Map<String, Object> response = new HashMap<>();
         try {
+            String prefix = typeCode + "_";
+            String prefixedId = eventId != null && eventId.startsWith(prefix) ? eventId : (prefix + eventId);
+            
             String metadata = JSON.toJSONString(dto);
             String dataHash = String.valueOf(metadata.hashCode());
 
             Map<String, String> payload = new HashMap<>();
-            payload.put("eventID", eventId);
+            payload.put("eventID", prefixedId); // 使用带前缀的 ID
             payload.put("dataHash", dataHash);
             payload.put("metadata", metadata);
 
             asyncService.addToQueue(payload);
 
             response.put("status", "success");
-            response.put("message", typeName + "已入队");
-            response.put("txId", eventId);
+            response.put("message", typeCode + "已入队");
+            response.put("txId", prefixedId); // 返回给前端的是带前缀的 ID
         } catch (Exception e) {
             response.put("status", "error");
             response.put("message", e.getMessage());

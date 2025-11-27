@@ -275,6 +275,9 @@
             toastMessage: ''
         },
         mounted() {
+            // 配置 Axios 鉴权头
+            axios.defaults.headers.common['X-API-KEY'] = 'secret-api-key';
+            
             this.generateSimData();
             this.connectWs();
         },

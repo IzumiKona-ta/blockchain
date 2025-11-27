@@ -5,6 +5,7 @@
 **基础信息：**
 *   **Base URL**: `http://localhost:8080/api`
 *   **Content-Type**: `application/json`
+*   **Headers**: 需在所有请求中加入 `X-API-KEY: secret-api-key`
 
 ---
 
@@ -12,6 +13,7 @@
 
 以下接口用于将业务系统 (`backcode`) 的实体数据上传至区块链。
 所有接口均采用 **异步队列机制**，返回成功仅代表“已入队”，实际存证结果需通过查询接口确认。
+另：后端会对部分敏感字段进行加密存储（AES/Base64），包括：`OrgInfo.orgName`、`ThreatAlert.impactScope`、`ReportConfig.reportUrl`。
 
 ### 1.1 提交组织信息
 *   **URL**: `/chain/org`
@@ -117,6 +119,26 @@
     }
     ```
 
+---
+
+## 2. 链上存证查询 (Rich Query)
+
+### 2.1 按类型批量查询
+*   **URL**: `/chain/list/{type}`
+*   **Method**: `GET`
+*   **描述**: 根据类型前缀范围查询链上存证（合约需支持 `queryEvidenceByType`）。
+*   **路径参数**: `type` ∈ `ORG | ALERT | TRAFFIC | REPORT | TRACE`
+*   **响应示例**:
+    ```json
+    {
+      "status": "success",
+      "data": [
+        { "eventID": "ORG_001", "dataHash": "...", "metadata": "..." },
+        { "eventID": "ORG_002", "dataHash": "...", "metadata": "..." }
+      ]
+    }
+    ```
+
 ### 1.5 提交溯源信息
 *   **URL**: `/chain/trace`
 *   **Method**: `POST`
@@ -146,11 +168,11 @@
 
 ---
 
-## 2. 通用基础接口 (Legacy)
+## 3. 通用基础接口 (Legacy)
 
 以下接口为系统基础功能，支持任意格式数据的存证与查询。
 
-### 2.1 通用存证提交
+### 3.1 通用存证提交
 *   **URL**: `/evidence`
 *   **Method**: `POST`
 *   **描述**: 手动提交任意数据上链。
@@ -163,7 +185,7 @@
     }
     ```
 
-### 2.2 存证查询
+### 3.2 存证查询
 *   **URL**: `/evidence/{id}`
 *   **Method**: `GET`
 *   **描述**: 根据 EventID 查询链上存证数据。
@@ -181,7 +203,29 @@
     }
     ```
 
-### 2.3 存证校验
+### 3.3 存证校验
+
+---
+
+## 4. 运维与监控 (Ops)
+
+### 4.1 健康检查与优雅停机
+*   **URL**: `/actuator/health`, `/actuator/info`, `/actuator/metrics`, `/actuator/shutdown`
+*   **Method**: `GET` (shutdown 为 `POST`)
+*   **说明**: 需在 `application.yml` 开启相关端点；`shutdown` 用于优雅停机。
+
+### 4.2 实时通知 (WebSocket)
+*   **Connect**: `ws` 端点为 `/ws`（SockJS/STOMP）
+*   **Subscribe**: 订阅主题 `/topic/alerts`
+*   **消息示例**:
+    ```json
+    {
+      "type": "BATCH_SUCCESS",
+      "txId": "...",
+      "count": 100,
+      "timestamp": 1700000000000
+    }
+    ```
 *   **URL**: `/verify`
 *   **Method**: `POST`
 *   **描述**: 校验前端/业务端计算的哈希与链上是否一致。
