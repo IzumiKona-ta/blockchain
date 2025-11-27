@@ -1,3 +1,6 @@
+################################
+
+
 # 区块链业务综合控制台（Backend）
 
 ## 简介
@@ -5,6 +8,32 @@
 - 异步批量处理（队列聚合 + 熔断重试），并通过 WebSocket 实时推送结果
 - 前端单页控制台 `src/main/resources/static/index.html`，支持数据模拟与监控
 - 基础安全与运维：API Key 鉴权、AOP 审计、Actuator 健康检查、选择性字段加密
+
+## 强制前置条件（WSL + Fabric Docker 网络）
+- 未在 WSL2 内部署并运行 Hyperledger Fabric 的 Docker Compose 网络时，后端无法连接到区块链网络，项目不可运行。
+- `application.yml` 中的网关配置指向 WSL 中 `fabric-samples/test-network` 生成的本地文件与证书，需在 WSL 环境内存在：
+  - `connection-org1.yaml`、用户证书与私钥目录
+  - 通道名称为 `mychannel`，合约名称为 `evidence`
+- 请在 WSL 中启动后端（而非 Windows 主机），推荐命令：`mvn spring-boot:run`
+
+### 在 WSL 中部署 Fabric 网络
+- 安装与准备
+  - 开启 WSL2 并安装 Linux 发行版（如 Ubuntu 22.04）
+  - 在 WSL 中安装 Docker 或启用 Docker Desktop 的 WSL 集成
+- 获取并启动 test-network
+  - `git clone https://github.com/hyperledger/fabric-samples ~/hyperledger/fabric-samples`
+  - `cd ~/hyperledger/fabric-samples/test-network`
+  - `./network.sh up createChannel -c mychannel -ca`
+- 部署链码（按你的链码路径调整）
+  - `./network.sh deployCC -c mychannel -ccn evidence -ccl java -ccp <你的链码路径>`
+- 验证
+  - `docker ps` 查看 `peer`、`orderer`、`ca` 等容器运行中
+  - 确认 `~/hyperledger/fabric-samples/test-network/organizations/...` 下生成 `connection-org1.yaml`、证书与私钥
+
+### 在 WSL 中启动后端
+- 构建：`mvn -q -DskipTests package`
+- 运行：`mvn spring-boot:run`
+- 访问：`http://localhost:8080/index.html`
 
 ## 主要特性
 - 异步批量上链：聚合入队数据为批次提交到链码 `submitEvidenceBatch`
@@ -33,8 +62,8 @@
 - 构建：
   - `mvn -q -DskipTests package`
 - 运行（任选其一）：
-  - `java -jar target/backend-0.0.1-SNAPSHOT.jar`
-  - 或 `mvn spring-boot:run`
+  - 在 WSL 中运行：`mvn spring-boot:run`
+  - 如需 Jar 方式：在 WSL 中执行 `java -jar target/backend-0.0.1-SNAPSHOT.jar`
 - 访问：
   - 控制台页面：`http://localhost:8080/index.html`
   - Actuator：`http://localhost:8080/actuator/health`
