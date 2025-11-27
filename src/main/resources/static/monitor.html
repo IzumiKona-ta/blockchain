@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>区块链实时监控看板</title>
+    <script src="https://cdn.bootcdn.net/ajax/libs/sockjs-client/1.5.1/sockjs.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/vue/2.6.14/vue.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/axios/0.21.1/axios.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f0f2f5; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        h1 { margin: 0; color: #1890ff; }
+        .status { padding: 4px 12px; border-radius: 4px; font-size: 14px; }
+        .status.connected { background: #e6f7ff; color: #1890ff; border: 1px solid #91d5ff; }
+        .status.disconnected { background: #fff1f0; color: #f5222d; border: 1px solid #ffa39e; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #e8e8e8; }
+        th { background-color: #fafafa; font-weight: 600; }
+        .log-box { height: 300px; overflow-y: auto; background: #282c34; color: #abb2bf; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; }
+        .log-item { margin-bottom: 4px; border-bottom: 1px dashed #3e4451; padding-bottom: 2px; }
+        .log-time { color: #61afef; margin-right: 8px; }
+        .refresh-btn { background: #1890ff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+        .refresh-btn:hover { background: #40a9ff; }
+    </style>
+</head>
+<body>
+<div id="app" class="container">
+    <div class="header">
+        <h1>🛡️ 业务区块链实时监控</h1>
+        <span class="status" :class="connected ? 'connected' : 'disconnected'">
+            {{ connected ? '🟢 WebSocket 已连接' : '🔴 WebSocket 未连接' }}
+        </span>
+    </div>
+
+    <div class="card">
+        <h3>🚀 实时上链通知 (订阅 /topic/alerts)</h3>
+        <div class="log-box" ref="logBox">
+            <div v-for="(log, index) in logs" :key="index" class="log-item">
+                <span class="log-time">[{{ formatTime(log.timestamp) }}]</span>
+                <span v-if="log.type === 'BATCH_SUCCESS'">
+                    ✅ 批量上链成功 | TxID: {{ log.txId }} | 数量: {{ log.count }}
+                </span>
+                <span v-else>
+                    {{ JSON.stringify(log) }}
+                </span>
+            </div>
+            <div v-if="logs.length === 0" style="color: #5c6370; text-align: center; margin-top: 100px;">
+                暂无实时消息...
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="header" style="margin-bottom: 0;">
+            <h3>📊 链上存证查询</h3>
+            <div>
+                <select v-model="selectedType" style="padding: 6px; border-radius: 4px; border: 1px solid #d9d9d9;">
+                    <option value="ORG">组织信息 (ORG)</option>
+                    <option value="ALERT">威胁告警 (ALERT)</option>
+                    <option value="TRAFFIC">流量统计 (TRAFFIC)</option>
+                    <option value="REPORT">报表配置 (REPORT)</option>
+                    <option value="TRACE">溯源信息 (TRACE)</option>
+                </select>
+                <button class="refresh-btn" @click="fetchData">查询</button>
+            </div>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Event ID</th>
+                    <th>Hash</th>
+                    <th>Metadata (Preview)</th>
+                    <th>Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr v-for="item in tableData" :key="item.eventID">
+                    <td style="font-family: monospace;">{{ item.eventID }}</td>
+                    <td style="font-family: monospace; font-size: 12px;">{{ item.dataHash }}</td>
+                    <td :title="item.metadata" style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        {{ item.metadata }}
+                    </td>
+                    <td>{{ item.timestamp }}</td>
+                </tr>
+                <tr v-if="tableData.length === 0">
+                    <td colspan="4" style="text-align: center; color: #999; padding: 30px;">
+                        暂无数据或查询失败（需合约支持 Rich Query）
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    new Vue({
+        el: '#app',
+        data: {
+            stompClient: null,
+            connected: false,
+            logs: [],
+            selectedType: 'ORG',
+            tableData: []
+        },
+        mounted() {
+            this.connect();
+        },
+        methods: {
+            connect() {
+                const socket = new SockJS('/ws');
+                this.stompClient = Stomp.over(socket);
+                this.stompClient.debug = null; // 禁用控制台调试日志
+                this.stompClient.connect({}, (frame) => {
+                    this.connected = true;
+                    console.log('Connected: ' + frame);
+                    this.stompClient.subscribe('/topic/alerts', (message) => {
+                        this.logs.unshift(JSON.parse(message.body));
+                        if (this.logs.length > 100) this.logs.pop();
+                    });
+                }, (error) => {
+                    console.error('Connection error:', error);
+                    this.connected = false;
+                    setTimeout(() => this.connect(), 5000); // 断线重连
+                });
+            },
+            formatTime(ts) {
+                return new Date(ts).toLocaleTimeString();
+            },
+            async fetchData() {
+                try {
+                    const res = await axios.get('/api/chain/list/' + this.selectedType);
+                    if (res.data.status === 'success') {
+                        this.tableData = res.data.data || [];
+                    } else {
+                        alert('查询失败: ' + res.data.message);
+                        this.tableData = [];
+                    }
+                } catch (e) {
+                    console.error(e);
+                    alert('请求异常');
+                }
+            }
+        }
+    });
+</script>
+</body>
+</html>

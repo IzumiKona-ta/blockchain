@@ -3,11 +3,13 @@ package com.example.blockchain.service;
 import com.alibaba.fastjson.JSON;
 import org.hyperledger.fabric.gateway.Contract;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
@@ -19,6 +21,9 @@ public class AsyncService {
 
     @Autowired
     private Contract contract;
+
+    @Autowired
+    private SimpMessagingTemplate template;
 
     private final BlockingQueue<Map<String, String>> evidenceQueue = new LinkedBlockingQueue<>();
     
@@ -66,7 +71,16 @@ public class AsyncService {
             System.out.println(">>> [批量上链] 正在打包 " + batch.size() + " 条数据...");
             String batchJson = JSON.toJSONString(batch);
             byte[] result = contract.submitTransaction("submitEvidenceBatch", batchJson);
-            System.out.println("✅ [成功] 批量 TxID: " + new String(result, StandardCharsets.UTF_8));
+            String txId = new String(result, StandardCharsets.UTF_8);
+            System.out.println("✅ [成功] 批量 TxID: " + txId);
+
+            // WebSocket 推送
+            Map<String, Object> message = new HashMap<>();
+            message.put("type", "BATCH_SUCCESS");
+            message.put("txId", txId);
+            message.put("count", batch.size());
+            message.put("timestamp", System.currentTimeMillis());
+            template.convertAndSend("/topic/alerts", message);
         } catch (Exception e) {
             System.err.println("❌ [失败] 上链异常: " + e.getMessage());
             

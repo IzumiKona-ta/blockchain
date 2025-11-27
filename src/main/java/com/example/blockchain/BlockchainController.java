@@ -2,6 +2,7 @@ package com.example.blockchain;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
+import com.example.blockchain.dto.*;
 import com.example.blockchain.service.AsyncService;
 import org.hyperledger.fabric.gateway.Contract;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,8 +21,6 @@ public class BlockchainController {
 
     @Autowired
     private AsyncService asyncService;
-
-    
 
     // 1. 提交接口 (保持不变)
     @PostMapping("/evidence")
@@ -56,7 +55,7 @@ public class BlockchainController {
         }
     }
     
-    // 3. 验证接口 (🔥🔥🔥 关键修复点)
+    // 3. 验证接口 (保持不变)
     @PostMapping("/verify")
     public Map<String, Object> verifyEvidence(@RequestBody Map<String, String> payload) {
         Map<String, Object> response = new HashMap<>();
@@ -76,7 +75,6 @@ public class BlockchainController {
             response.put("status", "success");
             response.put("isMatch", isMatch);
             
-            // ✅ 补全了下面这两行，前端才能显示出来！
             response.put("chainHash", chainHash); 
             response.put("localHash", clientHash);
             
@@ -86,5 +84,72 @@ public class BlockchainController {
             response.put("message", "校验失败: " + e.getMessage());
             return response;
         }
+    }
+
+    // --- 新增业务接口 ---
+
+    @PostMapping("/chain/org")
+    public Map<String, Object> submitOrg(@RequestBody OrgInfoDTO dto) {
+        return processDto("ORG_" + (dto.getOrgId() != null ? dto.getOrgId() : dto.getId()), dto, "组织信息");
+    }
+
+    @PostMapping("/chain/alert")
+    public Map<String, Object> submitAlert(@RequestBody ThreatAlertDTO dto) {
+        return processDto("ALERT_" + (dto.getThreatId() != null ? dto.getThreatId() : dto.getId()), dto, "威胁告警");
+    }
+
+    @PostMapping("/chain/traffic")
+    public Map<String, Object> submitTraffic(@RequestBody TrafficStatDTO dto) {
+        return processDto("TRAFFIC_" + dto.getId(), dto, "流量统计");
+    }
+
+    @PostMapping("/chain/report")
+    public Map<String, Object> submitReport(@RequestBody ReportConfigDTO dto) {
+        return processDto("REPORT_" + dto.getId(), dto, "报表配置");
+    }
+
+    @PostMapping("/chain/trace")
+    public Map<String, Object> submitTrace(@RequestBody SourceTracingDTO dto) {
+        return processDto("TRACE_" + dto.getId(), dto, "溯源信息");
+    }
+
+    // 新增：按类型批量查询 (Rich Query)
+    @GetMapping("/chain/list/{type}")
+    public Map<String, Object> queryByType(@PathVariable String type) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            // 需要合约支持 queryEvidenceByType 方法
+            byte[] result = contract.evaluateTransaction("queryEvidenceByType", type);
+            String jsonStr = new String(result, StandardCharsets.UTF_8);
+            response.put("status", "success");
+            response.put("data", JSON.parseArray(jsonStr));
+        } catch (Exception e) {
+            response.put("status", "error");
+            response.put("message", "查询失败: " + e.getMessage());
+        }
+        return response;
+    }
+
+    private Map<String, Object> processDto(String eventId, Object dto, String typeName) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            String metadata = JSON.toJSONString(dto);
+            String dataHash = String.valueOf(metadata.hashCode());
+
+            Map<String, String> payload = new HashMap<>();
+            payload.put("eventID", eventId);
+            payload.put("dataHash", dataHash);
+            payload.put("metadata", metadata);
+
+            asyncService.addToQueue(payload);
+
+            response.put("status", "success");
+            response.put("message", typeName + "已入队");
+            response.put("txId", eventId);
+        } catch (Exception e) {
+            response.put("status", "error");
+            response.put("message", e.getMessage());
+        }
+        return response;
     }
 }
