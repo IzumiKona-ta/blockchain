@@ -1,9 +1,11 @@
 # Maven
 target/
+build/
 *.war
 *.ear
 *.nar
 *.apk
+*.jar
 
 # Java class files
 *.class
@@ -35,7 +37,31 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+debug/
+*.pid
+*.gz
+
+# Node & Frontend
+node_modules/
+dist/
+.parcel-cache/
+.next/
+coverage/
+
+# Env & Secrets
+.env*
+*.pem
+*.crt
+*.key
+*.csr
 
 # Fabric Wallet (if generated locally)
 wallet/
 keystore/
+
+# Fabric crypto material & artifacts
+crypto-config/
+organizations/
+channel-artifacts/
+*.block
+*.tx

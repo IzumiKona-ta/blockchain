@@ -69,37 +69,56 @@ public class AsyncService {
     private void processBatchTransaction(List<Map<String, String>> batch) {
         try {
             System.out.println(">>> [批量上链] 正在打包 " + batch.size() + " 条数据...");
+            long t0 = System.nanoTime();
             String batchJson = JSON.toJSONString(batch);
             byte[] result = contract.submitTransaction("submitEvidenceBatch", batchJson);
             String txId = new String(result, StandardCharsets.UTF_8);
+            long durationMs = (System.nanoTime() - t0) / 1_000_000L;
             System.out.println("✅ [成功] 批量 TxID: " + txId);
 
-            // WebSocket 推送
+            List<String> sampleEventIds = new ArrayList<>();
+            for (int i = 0; i < batch.size() && i < 3; i++) {
+                sampleEventIds.add(batch.get(i).get("eventID"));
+            }
+
             Map<String, Object> message = new HashMap<>();
             message.put("type", "BATCH_SUCCESS");
             message.put("txId", txId);
             message.put("count", batch.size());
             message.put("timestamp", System.currentTimeMillis());
+            message.put("durationMs", durationMs);
+            message.put("queueSizeAfter", evidenceQueue.size());
+            message.put("sampleEventIds", sampleEventIds);
             template.convertAndSend("/topic/alerts", message);
         } catch (Exception e) {
             System.err.println("❌ [失败] 上链异常: " + e.getMessage());
             
-            // --- 关键：熔断重试机制 ---
-            // 如果批量失败（比如因为含有一个重复ID），我们把它们打散，重新塞回队列一个个试
             System.out.println("⚠️ [Fallback] 触发熔断重试机制，将打散重试...");
             
+            int requeued = 0;
+            int dropped = 0;
             for (Map<String, String> item : batch) {
                 int retry = Integer.parseInt(item.getOrDefault("retryCount", "0"));
                 if (retry < MAX_RETRY) {
                     item.put("retryCount", String.valueOf(retry + 1));
                     evidenceQueue.offer(item); // 重新入队
                     System.out.println("   -> ID: " + item.get("eventID") + " 已回炉重造 (重试第 " + (retry + 1) + " 次)");
+                    requeued++;
                 } else {
                     System.err.println("   -> 💀 ID: " + item.get("eventID") + " 彻底失败，已丢弃！");
+                    dropped++;
                 }
             }
             // 稍微降速，防止雪崩
             try { Thread.sleep(2000); } catch (InterruptedException ex) {}
+
+            Map<String, Object> message = new HashMap<>();
+            message.put("type", "BATCH_FAILED");
+            message.put("error", e.getMessage());
+            message.put("requeued", requeued);
+            message.put("dropped", dropped);
+            message.put("timestamp", System.currentTimeMillis());
+            template.convertAndSend("/topic/alerts", message);
         }
     }
 }

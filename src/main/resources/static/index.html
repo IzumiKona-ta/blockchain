@@ -131,12 +131,20 @@
                         <label>请求 URL</label>
                         <input :value="getApiUrl(simType)" readonly style="background: #f5f5f5; color: #666;">
                     </div>
-                    <div style="width: 200px;">
-                         <label>操作</label>
-                         <button class="btn btn-primary" style="width: 100%; justify-content: center;" @click="submitSimData" :disabled="loading">
-                             <span v-if="!loading">🚀 发送上链请求</span>
-                             <span v-else>⏳ 处理中...</span>
-                         </button>
+                    <div style="display: flex; gap: 8px; align-items: flex-end;">
+                        <div style="width: 200px;">
+                            <label>操作</label>
+                            <button class="btn btn-primary" style="width: 100%; justify-content: center;" @click="submitSimData" :disabled="loading">
+                                <span v-if="!loading">🚀 发送上链请求</span>
+                                <span v-else>⏳ 处理中...</span>
+                            </button>
+                        </div>
+                        <div style="width: 200px;">
+                            <label style="visibility:hidden">操作</label>
+                            <button class="btn" style="width: 100%; justify-content: center;" @click="burstSend" :disabled="loading">
+                                ⚡ 连发10条
+                            </button>
+                        </div>
                     </div>
                 </div>
                 
@@ -168,12 +176,19 @@
                         {{ wsConnected ? '已连接' : '断开' }}
                     </div>
                 </div>
-                <div class="log-box">
+                    <div class="log-box">
                     <div v-for="(log, index) in logs" :key="index" class="log-item">
                         <span class="log-time">[{{ formatTime(log.timestamp) }}]</span>
                         <span class="log-content">
                             <span v-if="log.type === 'BATCH_SUCCESS'" style="color: #98c379;">
-                                ✅ 批量上链成功 | TxID: {{ log.txId }} | 数量: {{ log.count }}
+                                ✅ 批量上链成功 | TxID: {{ log.txId }} | 数量: {{ log.count }} | 用时: {{ log.durationMs }}ms | 队列剩余: {{ log.queueSizeAfter }} | 样本: {{ (log.sampleEventIds || []).join(', ') }}
+                                <button class="btn" @click="log.expanded = !log.expanded" style="padding:2px 6px; font-size:12px; margin-left:8px;">详情</button>
+                                <pre v-if="log.expanded" style="background:#1e222a; color:#c9d1d9; padding:8px; border-radius:4px; margin-top:6px;">{{ JSON.stringify(log, null, 2) }}</pre>
+                            </span>
+                            <span v-else-if="log.type === 'BATCH_FAILED'" style="color: #e06c75;">
+                                ❌ 批量失败 | 重试: {{ log.requeued }} | 丢弃: {{ log.dropped }} | 错误: {{ log.error }}
+                                <button class="btn" @click="log.expanded = !log.expanded" style="padding:2px 6px; font-size:12px; margin-left:8px;">详情</button>
+                                <pre v-if="log.expanded" style="background:#1e222a; color:#c9d1d9; padding:8px; border-radius:4px; margin-top:6px;">{{ JSON.stringify(log, null, 2) }}</pre>
                             </span>
                             <span v-else>
                                 {{ JSON.stringify(log) }}
@@ -183,7 +198,7 @@
                     <div v-if="logs.length === 0" style="color: #5c6370; text-align: center; margin-top: 150px;">
                         Waiting for messages...
                     </div>
-                </div>
+                    </div>
             </div>
 
             <div class="card">
@@ -378,10 +393,56 @@
                     }
                 } catch (e) {
                     let msg = e.message;
-                    if (e instanceof SyntaxError) msg = "JSON 格式错误";
-                    else if (e.response) msg = `HTTP Error: ${e.response.status} ${e.response.statusText}`;
-                    
+                    if (e.response && e.response.data && e.response.data.message) {
+                        msg = e.response.data.message;
+                    }
                     this.submitStatus = { type: 'error', msg: `❌ 请求失败: ${msg}` };
+                } finally {
+                    this.loading = false;
+                }
+            },
+
+            async burstSend() {
+                if (this.loading) return;
+                this.loading = true;
+                this.submitStatus = { type: '', msg: '' };
+                this.submitResponse = null;
+                try {
+                    const base = JSON.parse(this.simJson);
+                    const url = this.getApiUrl(this.simType);
+                    const count = 10;
+                    const start = performance.now();
+                    const reqs = [];
+                    for (let i = 0; i < count; i++) {
+                        const payload = JSON.parse(JSON.stringify(base));
+                        const now = new Date();
+                        const timeStr = now.toISOString().replace('T', ' ').split('.')[0];
+                        payload.createTime = timeStr;
+                        if (payload.updateTime !== undefined) payload.updateTime = timeStr;
+                        payload.id = typeof payload.id === 'number' ? payload.id + i + Math.floor(Math.random() * 1000) : Math.floor(Math.random() * 1000000);
+                        if (this.simType === 'ORG') {
+                            payload.orgId = 'ORG_' + Math.floor(Math.random() * 100000);
+                        } else if (this.simType === 'ALERT') {
+                            payload.threatId = 'THREAT-' + Date.now() + '-' + i;
+                        } else if (this.simType === 'TRAFFIC') {
+                            payload.statTime = timeStr;
+                        } else if (this.simType === 'REPORT') {
+                            payload.reportUrl = 'http://oss.example.com/report/' + payload.id + '.pdf';
+                        }
+                        reqs.push(axios.post(url, payload));
+                    }
+                    const results = await Promise.all(reqs.map(p => p.catch(e => ({ error: e }))));
+                    const ok = results.filter(r => r && r.data && (r.data.status === 'success' || r.data.txId)).length;
+                    const end = performance.now();
+                    this.submitStatus = { type: 'success', msg: `✅ 连发${count}条，成功${ok}条，用时${Math.round(end - start)}ms` };
+                    this.toastMessage = `已连发${count}条，后台批处理进行中`;
+                    this.showToast = true;
+                } catch (e) {
+                    let msg = e.message;
+                    if (e.response && e.response.data && e.response.data.message) {
+                        msg = e.response.data.message;
+                    }
+                    this.submitStatus = { type: 'error', msg: `❌ 连发失败: ${msg}` };
                 } finally {
                     this.loading = false;
                 }
@@ -410,6 +471,7 @@
             
             handleIncomingMessage(msg) {
                 // Add to log
+                msg.expanded = false;
                 this.logs.unshift(msg);
                 if (this.logs.length > 200) this.logs.pop();
                 
@@ -417,7 +479,7 @@
                 if (this.currentView !== 'monitor') {
                     this.toastMessage = msg.type === 'BATCH_SUCCESS' 
                         ? `批量上链成功 (${msg.count} 条)` 
-                        : '收到新的链上消息';
+                        : (msg.type === 'BATCH_FAILED' ? `批量失败，重试${msg.requeued}条` : '收到新的链上消息');
                     this.showToast = true;
                     setTimeout(() => { this.showToast = false; }, 3000);
                 }
