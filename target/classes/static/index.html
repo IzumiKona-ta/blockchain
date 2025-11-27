@@ -3,136 +3,280 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>区块链存证验证平台 (Day 4 Demo)</title>
+    <title>区块链安全存证系统 - 综合调试控制台</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; padding-top: 50px; }
-        .container { width: 800px; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h1 { text-align: center; color: #333; }
-        .section { margin-bottom: 30px; border: 1px solid #e1e1e1; padding: 20px; border-radius: 5px; }
-        .section h2 { margin-top: 0; color: #007bff; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; }
+        :root { --primary: #2c3e50; --accent: #3498db; --success: #27ae60; --danger: #c0392b; --light: #ecf0f1; }
+        body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #f4f6f7; margin: 0; padding: 20px; color: #333; display: flex; gap: 20px; height: 100vh; box-sizing: border-box; }
+        
+        /* 布局 */
+        .left-panel { flex: 1; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; }
+        .right-panel { flex: 1; background: #1e1e1e; color: #0f0; border-radius: 8px; padding: 15px; font-family: 'Consolas', monospace; display: flex; flex-direction: column; }
+        
+        /* 卡片样式 */
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        h2 { margin-top: 0; border-bottom: 2px solid var(--light); padding-bottom: 10px; color: var(--primary); font-size: 1.2em; display: flex; align-items: center; justify-content: space-between; }
+        
+        /* 表单元素 */
         .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-        button { background-color: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
-        button:hover { background-color: #0056b3; }
-        button.verify-btn { background-color: #28a745; }
-        button.verify-btn:hover { background-color: #218838; }
-        .result-box { background: #f8f9fa; border: 1px solid #ddd; padding: 15px; margin-top: 15px; border-radius: 4px; white-space: pre-wrap; font-family: monospace; min-height: 50px; word-break: break-all;}
-        .success { color: green; font-weight: bold; }
-        .error { color: red; font-weight: bold; }
+        label { display: block; font-weight: 600; margin-bottom: 5px; color: #7f8c8d; font-size: 0.9em; }
+        input, textarea, select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-family: inherit; }
+        textarea { resize: vertical; min-height: 80px; font-family: monospace; font-size: 0.9em; }
+        input:focus, textarea:focus { border-color: var(--accent); outline: none; }
+        
+        /* 按钮 */
+        .btn-group { display: flex; gap: 10px; margin-top: 15px; }
+        button { flex: 1; padding: 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover { background: #2980b9; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-success:hover { background: #219150; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-warning { background: #f39c12; color: white; }
+        .btn-outline { background: transparent; border: 1px solid #bdc3c7; color: #7f8c8d; }
+        .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+        /* 快捷标签 */
+        .tags { display: flex; gap: 5px; margin-bottom: 10px; }
+        .tag { background: #eef2f3; padding: 4px 8px; border-radius: 12px; font-size: 0.8em; cursor: pointer; color: #555; }
+        .tag:hover { background: #dfe6e9; color: var(--accent); }
+
+        /* 日志终端 */
+        #log-container { flex: 1; overflow-y: auto; white-space: pre-wrap; word-break: break-all; font-size: 0.9em; line-height: 1.4; }
+        .log-entry { margin-bottom: 8px; border-bottom: 1px dashed #333; padding-bottom: 4px; }
+        .log-time { color: #888; margin-right: 10px; }
+        .log-method { color: #e67e22; font-weight: bold; }
+        .log-url { color: #3498db; }
+        .log-success { color: #2ecc71; }
+        .log-error { color: #e74c3c; }
+        
+        /* 状态指示灯 */
+        .status-badge { padding: 5px 10px; border-radius: 4px; font-size: 0.9em; display: inline-block; width: 100%; text-align: center; box-sizing: border-box;}
+        .status-match { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .status-mismatch { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>🔗 区块链存证验证中心</h1>
-
-    <div class="section">
-        <h2>📝 存证上链 (Write)</h2>
-        <div class="form-group">
-            <label>事件 ID (Event ID):</label>
-            <input type="text" id="input-id" placeholder="例如: ALERT_2024_001">
-        </div>
-        <div class="form-group">
-            <label>数据哈希 (Data Hash):</label>
-            <input type="text" id="input-hash" placeholder="例如: a1b2c3d4...">
-        </div>
-        <div class="form-group">
-            <label>备注信息 (Metadata JSON):</label>
-            <input type="text" id="input-meta" placeholder='{"level":"high", "owner":"admin"}' value='{"source":"web-demo"}'>
-        </div>
-        <button onclick="submitEvidence()">🚀 立即上链</button>
-        <div id="result-submit" class="result-box">等待操作...</div>
-    </div>
-
-    <div class="section">
-        <h2>🔍 查询与验证 (Verify)</h2>
-        <div class="form-group">
-            <label>输入要查询/验证的事件 ID:</label>
-            <input type="text" id="query-id" placeholder="输入刚才上链的 ID">
-        </div>
+    <div class="left-panel">
         
-        <div style="display: flex; gap: 10px;">
-            <button onclick="queryEvidence()">📄 仅查询</button>
-            <button class="verify-btn" onclick="verifyEvidence()">🛡️ 验证一致性</button>
+        <div class="card">
+            <h2>
+                📝 数据上链 (Write)
+                <span style="font-size: 0.8em; color: #999;">异步队列 + 批量打包</span>
+            </h2>
+            
+            <div class="tags">
+                <span class="tag" onclick="fillTemplate('RULE')">🛡️ 安全规则</span>
+                <span class="tag" onclick="fillTemplate('FLOW')">🌊 网络流量</span>
+                <span class="tag" onclick="fillTemplate('ALERT')">🚨 威胁告警</span>
+                <span class="tag" onclick="fillTemplate('USER')">👤 组织信息</span>
+            </div>
+
+            <div class="form-group">
+                <label>事件ID (Event ID)</label>
+                <div style="display: flex; gap: 5px;">
+                    <input type="text" id="w-id" placeholder="全局唯一ID">
+                    <button class="btn-outline" style="flex: 0 0 80px;" onclick="genRandomID()">🎲 随机</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>数据哈希 (Data Hash / Fingerprint)</label>
+                <input type="text" id="w-hash" placeholder="SHA256 摘要">
+            </div>
+            <div class="form-group">
+                <label>业务数据 (Metadata - JSON)</label>
+                <textarea id="w-meta" placeholder="在此输入业务详情 JSON..."></textarea>
+            </div>
+            <div class="btn-group">
+                <button class="btn-primary" onclick="submitEvidence()">🚀 立即上链</button>
+                <button class="btn-warning" onclick="stressTest()">🔥 压力测试 (连发10条)</button>
+            </div>
         </div>
 
-        <div id="result-query" class="result-box">查询结果将显示在这里...</div>
+        <div class="card">
+            <h2>🔍 查询与校验 (Query & Verify)</h2>
+            <div class="form-group">
+                <label>目标 ID</label>
+                <input type="text" id="q-id" placeholder="输入要查询的 Event ID">
+            </div>
+            <div class="btn-group">
+                <button class="btn-outline" onclick="queryEvidence()">📄 查询详情</button>
+                <button class="btn-success" onclick="verifyEvidence()">🛡️ 校验哈希一致性</button>
+            </div>
+            
+            <div id="verify-result" style="margin-top: 15px; display: none;">
+                <div class="status-badge" id="verify-badge"></div>
+                <div style="margin-top:10px; font-size: 0.85em; display: grid; grid-template-columns: 80px 1fr; gap: 5px;">
+                    <div>链上Hash:</div><div id="v-chain-hash" style="font-family: monospace;"></div>
+                    <div>本地Hash:</div><div id="v-local-hash" style="font-family: monospace;"></div>
+                </div>
+            </div>
+        </div>
     </div>
-</div>
+
+    <div class="right-panel">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #333; padding-bottom: 10px;">
+            <span>📺 交互日志 (Console)</span>
+            <button style="background:none; border:1px solid #555; color:#888; padding: 2px 8px; font-size:0.8em;" onclick="clearLog()">清空</button>
+        </div>
+        <div id="log-container">
+            <div class="log-entry">系统就绪。等待操作...<br>API 地址: http://localhost:8080/api</div>
+        </div>
+    </div>
 
 <script>
-    const API_BASE = 'http://localhost:8080/api';
+    const API = 'http://localhost:8080/api';
 
-    // 1. 提交上链
+    // --- 1. 辅助功能 ---
+    function genRandomID() {
+        const prefix = ['RULE', 'FLOW', 'ALERT', 'USER'][Math.floor(Math.random()*4)];
+        const rand = Math.floor(Math.random() * 100000);
+        document.getElementById('w-id').value = `${prefix}_${Date.now()}_${rand}`;
+        // 自动生成一个伪哈希
+        document.getElementById('w-hash').value = "hash_" + Math.random().toString(36).substring(2);
+    }
+
+    function fillTemplate(type) {
+        let meta = {};
+        if(type === 'RULE') {
+            meta = { type: "RULE", action: "deny", proto: "tcp", src_port: 22, desc: "禁止SSH暴力破解" };
+            document.getElementById('w-id').value = `RULE_${Date.now()}`;
+        } else if(type === 'FLOW') {
+            meta = { type: "FLOW", src: "192.168.1.5", dst: "10.0.0.1", bytes: 1024, duration: 5.2 };
+            document.getElementById('w-id').value = `FLOW_${Date.now()}`;
+        } else if(type === 'ALERT') {
+            meta = { type: "ALERT", level: "High", attack_type: "SQL Injection", target: "/login" };
+            document.getElementById('w-id').value = `ALERT_${Date.now()}`;
+        } else {
+            meta = { type: "USER", role: "admin", dept: "Security Center", user: "sam" };
+            document.getElementById('w-id').value = `USER_${Date.now()}`;
+        }
+        document.getElementById('w-meta').value = JSON.stringify(meta, null, 2);
+        document.getElementById('w-hash').value = "h_" + Math.random().toString(36).substring(7); // 模拟哈希
+        log(`[模板] 已填充 ${type} 类型模板数据`);
+    }
+
+    function log(msg, type='info') {
+        const box = document.getElementById('log-container');
+        const time = new Date().toLocaleTimeString();
+        let color = type === 'error' ? 'log-error' : (type === 'success' ? 'log-success' : '');
+        
+        const div = document.createElement('div');
+        div.className = 'log-entry';
+        div.innerHTML = `<span class="log-time">[${time}]</span> <span class="${color}">${msg}</span>`;
+        box.prepend(div);
+    }
+
+    function clearLog() { document.getElementById('log-container').innerHTML = ''; }
+
+    // --- 2. 核心业务逻辑 ---
+
+    // 上链
     async function submitEvidence() {
-        const id = document.getElementById('input-id').value;
-        const hash = document.getElementById('input-hash').value;
-        const meta = document.getElementById('input-meta').value;
-        const resultBox = document.getElementById('result-submit');
+        const id = document.getElementById('w-id').value;
+        const hash = document.getElementById('w-hash').value;
+        const meta = document.getElementById('w-meta').value;
 
-        if(!id || !hash) { alert("ID和哈希不能为空"); return; }
+        if(!id) return alert("请先填写事件ID");
 
-        resultBox.innerText = "正在提交到区块链，请稍候...";
+        log(`>>> 发起上链请求: ${id}`, 'info');
         
         try {
-            const res = await fetch(`${API_BASE}/evidence`, {
+            const res = await fetch(`${API}/evidence`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ eventID: id, dataHash: hash, metadata: meta })
             });
             const data = await res.json();
-            resultBox.innerHTML = `<span class="${data.status === 'success' ? 'success' : 'error'}">${JSON.stringify(data, null, 2)}</span>`;
-        } catch (err) {
-            resultBox.innerText = "请求失败: " + err;
+            
+            if(data.status === 'success') {
+                log(`✅ [后端返回] ${data.message}`, 'success');
+                // 自动把ID填入查询框，方便验证
+                document.getElementById('q-id').value = id;
+            } else {
+                log(`❌ [错误] ${data.message}`, 'error');
+            }
+        } catch(e) {
+            log(`❌ [网络异常] ${e}`, 'error');
         }
     }
 
-    // 2. 查询
-    async function queryEvidence() {
-        const id = document.getElementById('query-id').value;
-        const resultBox = document.getElementById('result-query');
-        if(!id) { alert("请输入ID"); return; }
-
-        resultBox.innerText = "正在查询链上账本...";
-        try {
-            const res = await fetch(`${API_BASE}/evidence/${id}`);
-            const data = await res.json();
-            resultBox.innerText = JSON.stringify(data, null, 2);
-        } catch (err) {
-            resultBox.innerText = "查询失败: " + err;
-        }
-    }
-
-    // 3. 验证 (Day 4 核心功能)
-    async function verifyEvidence() {
-        const id = document.getElementById('query-id').value;
-        // 模拟：假设我们本地还是用刚才输入的 hash 进行对比
-        // 在真实场景中，这里应该是从本地数据库读出来的 hash
-        const localHash = document.getElementById('input-hash').value || "mock_local_hash"; 
+    // 压力测试 (连发)
+    async function stressTest() {
+        const baseId = `BATCH_${Date.now()}`;
+        log(`🔥 开始压力测试，连发 10 条数据 (前缀: ${baseId})...`, 'info');
         
-        const resultBox = document.getElementById('result-query');
-        if(!id) { alert("请输入ID"); return; }
+        for(let i=1; i<=10; i++) {
+            const id = `${baseId}_${i}`;
+            const payload = {
+                eventID: id,
+                dataHash: `hash_test_${i}`,
+                metadata: JSON.stringify({ type: "STRESS_TEST", index: i })
+            };
+            
+            // 不等待 await，模拟高并发
+            fetch(`${API}/evidence`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            }).then(res => res.json()).then(data => {
+                log(`   -> [${i}/10] 发送成功: ${id}`, 'success');
+            });
+        }
+        log(`⏳ 10条请求已全部发出，请观察后端控制台的“批量打包”日志！`);
+    }
 
-        resultBox.innerText = `正在进行密码学校验...\n本地Hash: ${localHash}\n链上Hash: (读取中...)`;
+    // 查询
+    async function queryEvidence() {
+        const id = document.getElementById('q-id').value;
+        if(!id) return alert("请输入ID");
 
+        log(`>>> 查询链上数据: ${id}...`);
         try {
-            const res = await fetch(`${API_BASE}/verify`, {
+            const res = await fetch(`${API}/evidence/${id}`);
+            const data = await res.json();
+            if(data.status === 'success') {
+                log(`📄 [查询结果] \n${JSON.stringify(data.data, null, 2)}`);
+            } else {
+                log(`⚠️ [查询失败] ${data.message}`, 'error');
+            }
+        } catch(e) { log(`❌ ${e}`, 'error'); }
+    }
+
+    // 校验
+    async function verifyEvidence() {
+        const id = document.getElementById('q-id').value;
+        // 模拟：从左边输入框获取“本地Hash”，如果没填就用“mock”
+        const localHash = document.getElementById('w-hash').value || "mock_tampered_hash";
+        
+        if(!id) return alert("请输入ID");
+
+        log(`>>> 请求校验 API... (ID: ${id})`);
+        try {
+            const res = await fetch(`${API}/verify`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ eventID: id, dataHash: localHash })
             });
             const data = await res.json();
             
-            let html = `<strong>校验结果: ${data.isMatch ? '✅ 通过 (一致)' : '❌ 失败 (被篡改)'}</strong>\n`;
-            html += `链上 Hash: ${data.chainHash}\n`;
-            html += `本地 Hash: ${data.localHash}`;
+            const resBox = document.getElementById('verify-result');
+            const badge = document.getElementById('verify-badge');
             
-            resultBox.innerHTML = html;
-            resultBox.style.color = data.isMatch ? 'green' : 'red';
-        } catch (err) {
-            resultBox.innerText = "验证接口请求失败: " + err;
-        }
+            resBox.style.display = 'block';
+            document.getElementById('v-chain-hash').innerText = data.chainHash || "未找到";
+            document.getElementById('v-local-hash').innerText = localHash;
+
+            if(data.isMatch) {
+                badge.className = 'status-badge status-match';
+                badge.innerText = '✅ 哈希一致 (数据未篡改)';
+                log(`✅ 校验通过！`, 'success');
+            } else {
+                badge.className = 'status-badge status-mismatch';
+                badge.innerText = '❌ 哈希不匹配 (数据可能被篡改)';
+                log(`❌ 校验失败！链上Hash与本地不符。`, 'error');
+            }
+        } catch(e) { log(`❌ ${e}`, 'error'); }
     }
 </script>
 </body>
