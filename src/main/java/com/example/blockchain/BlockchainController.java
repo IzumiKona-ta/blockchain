@@ -118,14 +118,19 @@ public class BlockchainController {
     public Map<String, Object> queryByType(@PathVariable String type) {
         Map<String, Object> response = new HashMap<>();
         try {
-            // 需要合约支持 queryEvidenceByType 方法
+            // 需要合约支持 queryEvidenceByType 方法 (Range Query实现)
             byte[] result = contract.evaluateTransaction("queryEvidenceByType", type);
             String jsonStr = new String(result, StandardCharsets.UTF_8);
             response.put("status", "success");
             response.put("data", JSON.parseArray(jsonStr));
         } catch (Exception e) {
             response.put("status", "error");
-            response.put("message", "查询失败: " + e.getMessage());
+            String msg = e.getMessage();
+            if (msg.contains("Transaction function") && msg.contains("not found")) {
+                response.put("message", "查询失败: 智能合约未升级，缺少 queryEvidenceByType 方法。请修改合约并升级链码。");
+            } else {
+                response.put("message", "查询失败: " + msg);
+            }
         }
         return response;
     }
@@ -133,11 +138,15 @@ public class BlockchainController {
     private Map<String, Object> processDto(String eventId, Object dto, String typeName) {
         Map<String, Object> response = new HashMap<>();
         try {
+            // --- 关键修改：为了配合合约的 Range Query，ID 必须带上前缀 ---
+            // 例如：ORG_123, ALERT_THREAT-456
+            String prefixedId = typeName + "_" + eventId;
+            
             String metadata = JSON.toJSONString(dto);
             String dataHash = String.valueOf(metadata.hashCode());
 
             Map<String, String> payload = new HashMap<>();
-            payload.put("eventID", eventId);
+            payload.put("eventID", prefixedId); // 使用带前缀的 ID
             payload.put("dataHash", dataHash);
             payload.put("metadata", metadata);
 
@@ -145,7 +154,7 @@ public class BlockchainController {
 
             response.put("status", "success");
             response.put("message", typeName + "已入队");
-            response.put("txId", eventId);
+            response.put("txId", prefixedId); // 返回给前端的是带前缀的 ID
         } catch (Exception e) {
             response.put("status", "error");
             response.put("message", e.getMessage());
