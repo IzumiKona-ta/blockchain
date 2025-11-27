@@ -9,6 +9,32 @@
 
 ---
 
+## 项目解析 (Overview)
+
+- 架构组成：Spring Boot 后端 + Fabric Gateway 合约调用 + 异步批处理队列 + WebSocket 实时通知 + Actuator 运维端点 + AOP 审计日志 + 拦截器 API Key 鉴权 + 前端单页 `index.html`。
+- 关键依赖：`spring-boot-starter-web`、`spring-boot-starter-websocket`、`spring-boot-starter-aop`、`spring-boot-starter-actuator`、`fabric-gateway-java`、`fastjson`、`lombok`（见 `pom.xml`）。
+- 目录结构：
+  - 后端入口与配置：`src/main/java/com/example/blockchain/Application.java`、`FabricConfig.java:31-47`、`config/WebSocketConfig.java`、`config/WebConfig.java`
+  - 业务接口：`BlockchainController.java`（提交/查询/富查询）
+  - 队列与批处理：`service/AsyncService.java:33-40、41-67、69-104`
+  - 安全与审计：`interceptor/AuthInterceptor.java`、`aspect/AuditLogAspect.java`
+  - 前端页面：`src/main/resources/static/index.html`
+- 业务流程：
+  - 上链提交：`/api/chain/*` 接口接收 DTO → 统一生成 `TYPE_id` 前缀键 → 计算 `metadata` 哈希 → 入队（`AsyncService.addToQueue`）→ 后台批量调用合约 `submitEvidenceBatch`。
+  - 查询与校验：`/api/evidence/{id}` 查询单条；`/api/verify` 比对哈希；`/api/chain/list/{type}` 通过合约 `queryEvidenceByType` 范围查询（`EvidenceContract`）。
+  - 通知与监控：批量成功后通过 WebSocket 推送到 `/topic/alerts`；Actuator 提供健康与停机接口。
+- 安全与合规：
+  - API Key 鉴权：`X-API-KEY` 头部在前端统一设置（`index.html`）；后端拦截器校验。
+  - 数据加密：对 `OrgInfo.orgName`、`ThreatAlert.impactScope`、`ReportConfig.reportUrl` 进行 AES 加密（`BlockchainController.java:92-104、106-118、126-137`）。
+  - 审计日志：AOP 记录请求/响应（`aspect/AuditLogAspect.java`）。
+- 运维：
+  - Actuator 端点：`/actuator/health`、`/actuator/info`、`/actuator/metrics`、`/actuator/shutdown`（需要在 `application.yml:19-28` 开启）。
+- 启动与联调：
+  - 启动：`mvn spring-boot:run` 或打包运行；确保 WSL 网络与证书路径配置正确（`application.yml:4-17`）。
+  - 联调：打开 `index.html`，先在“数据模拟器”页提交，再在“实时监控看板”查看推送与在“链上存证查询”按类型查询。
+
+---
+
 ## 1. 业务数据上链接口 (New)
 
 以下接口用于将业务系统 (`backcode`) 的实体数据上传至区块链。
