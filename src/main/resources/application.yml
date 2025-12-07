@@ -15,14 +15,3 @@ fabric:
   username: User1
   channelName: mychannel
   contractName: evidence
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,shutdown
-  endpoint:
-    shutdown:
-      enabled: true
-    health:
-      show-details: always

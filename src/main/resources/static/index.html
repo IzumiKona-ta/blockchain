@@ -215,6 +215,10 @@
                         <button class="btn btn-primary" @click="fetchChainData" :disabled="queryLoading">
                             {{ queryLoading ? '查询中...' : '查询' }}
                         </button>
+                        <input v-model="singleId" placeholder="输入 EventID，例如 ORG_123" style="width: 280px;" />
+                        <button class="btn" @click="fetchSingleEvidence" :disabled="singleLoading">
+                            {{ singleLoading ? '单体查询中...' : '单体查询' }}
+                        </button>
                     </div>
                 </div>
                 <div style="overflow-x: auto;">
@@ -241,6 +245,36 @@
                             </tr>
                         </tbody>
                     </table>
+                    <div v-if="singleResult" style="margin-top: 12px;">
+                        <div style="font-weight: 600; font-size: 14px; margin-bottom: 6px;">单体查询结果</div>
+                        <pre style="background:#f5f5f5; padding:12px; border-radius:4px; font-size:12px; overflow-x: auto;">{{ JSON.stringify(singleResult, null, 2) }}</pre>
+                    </div>
+                    <div style="margin-top: 12px; display: flex; gap: 10px; align-items: flex-end;">
+                        <div style="flex: 0 0 240px;">
+                            <label>校验 EventID</label>
+                            <input v-model="verifyEventId" placeholder="如 ORG_123">
+                        </div>
+                        <div style="flex: 0 0 320px;">
+                            <label>本地哈希 (dataHash)</label>
+                            <input v-model="verifyHash" placeholder="粘贴/填写本地哈希">
+                        </div>
+                        <div style="flex: 0 0 160px;">
+                            <label style="visibility:hidden">操作</label>
+                            <button class="btn btn-primary" @click="runVerify" :disabled="verifyLoading">
+                                {{ verifyLoading ? '校验中...' : '校验哈希' }}
+                            </button>
+                        </div>
+                        <div style="flex: 0 0 160px;">
+                            <label style="visibility:hidden">操作</label>
+                            <button class="btn" @click="fillFromSingleResult" :disabled="!singleResult">
+                                从单体查询填充
+                            </button>
+                        </div>
+                    </div>
+                    <div v-if="verifyResult" style="margin-top: 8px;">
+                        <div style="font-weight: 600; font-size: 14px; margin-bottom: 6px;">校验结果</div>
+                        <pre style="background:#f5f5f5; padding:12px; border-radius:4px; font-size:12px; overflow-x: auto;">{{ JSON.stringify(verifyResult, null, 2) }}</pre>
+                    </div>
                 </div>
             </div>
         </div>
@@ -284,6 +318,13 @@
             queryType: 'ORG',
             tableData: [],
             queryLoading: false,
+            singleId: '',
+            singleLoading: false,
+            singleResult: null,
+            verifyEventId: '',
+            verifyHash: '',
+            verifyLoading: false,
+            verifyResult: null,
             
             // Toast
             showToast: false,
@@ -505,6 +546,64 @@
                 } finally {
                     this.queryLoading = false;
                 }
+            },
+
+            async fetchSingleEvidence() {
+                if (!this.singleId) {
+                    alert('请输入 EventID');
+                    return;
+                }
+                this.singleLoading = true;
+                try {
+                    const res = await axios.get('/api/evidence/' + encodeURIComponent(this.singleId));
+                    if (res.data.status === 'success') {
+                        this.singleResult = res.data.data || null;
+                    } else {
+                        this.singleResult = null;
+                        alert('查询失败: ' + (res.data.message || ''));
+                    }
+                } catch (e) {
+                    console.error(e);
+                    this.singleResult = null;
+                    alert('查询异常，请检查后端日志');
+                } finally {
+                    this.singleLoading = false;
+                }
+            },
+
+            async runVerify() {
+                if (!this.verifyEventId || !this.verifyHash) {
+                    alert('请输入 EventID 和 本地哈希');
+                    return;
+                }
+                this.verifyLoading = true;
+                try {
+                    const payload = { eventID: this.verifyEventId, dataHash: this.verifyHash };
+                    const res = await axios.post('/api/verify', payload);
+                    if (res.data.status === 'success') {
+                        this.verifyResult = res.data;
+                        this.toastMessage = res.data.isMatch ? '哈希匹配' : '哈希不匹配';
+                        this.showToast = true;
+                        setTimeout(() => { this.showToast = false; }, 3000);
+                    } else {
+                        this.verifyResult = null;
+                        alert('校验失败: ' + (res.data.message || ''));
+                    }
+                } catch (e) {
+                    console.error(e);
+                    this.verifyResult = null;
+                    alert('校验异常，请检查后端日志');
+                } finally {
+                    this.verifyLoading = false;
+                }
+            },
+
+            fillFromSingleResult() {
+                if (!this.singleResult) return;
+                const id = this.singleResult.eventID || this.singleResult.id || '';
+                const hash = this.singleResult.dataHash || '';
+                this.verifyEventId = id;
+                this.verifyHash = hash;
             }
         }
     });
