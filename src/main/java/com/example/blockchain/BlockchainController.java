@@ -37,7 +37,6 @@ public class BlockchainController {
         return response;
     }
 
-    // 2. 查询接口 (保持不变)
     @GetMapping("/evidence/{id}")
     public Map<String, Object> getEvidence(@PathVariable String id) {
         Map<String, Object> response = new HashMap<>();
@@ -45,8 +44,20 @@ public class BlockchainController {
             System.out.println(">>> 正在查询: " + id);
             byte[] result = contract.evaluateTransaction("getEvidenceByEventID", id);
             String jsonStr = new String(result, StandardCharsets.UTF_8);
+
+            JSONObject data = JSON.parseObject(jsonStr);
+            String metadataStr = data.getString("metadata");
+            if (metadataStr != null) {
+                JSONObject meta = JSON.parseObject(metadataStr);
+                decryptField(meta, "orgName");
+                decryptField(meta, "sourceIp");
+                decryptField(meta, "reportUrl");
+                decryptField(meta, "impactScope");
+                data.put("metadata", meta);
+            }
+
             response.put("status", "success");
-            response.put("data", JSON.parseObject(jsonStr));
+            response.put("data", data);
             return response;
         } catch (Exception e) {
             response.put("status", "error");
@@ -188,6 +199,20 @@ public class BlockchainController {
             response.put("message", e.getMessage());
         }
         return response;
+    }
+
+    private void decryptField(JSONObject json, String key) {
+        if (json.containsKey(key)) {
+            try {
+                String val = json.getString(key);
+                if (val != null && val.length() > 10 && !val.contains(" ")) {
+                    String plain = AESUtil.decrypt(val);
+                    if (plain != null) {
+                        json.put(key, plain);
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
     }
 
 }
